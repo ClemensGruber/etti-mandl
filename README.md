@@ -1,2 +1,2 @@
-# etti-mandl
-HaniMandl ist ein halbautomatischer Honig-Abfüll-Roboter. 
+# EttiMandl
+EttiMandl ist ein halbautomatischer Honig-Etikettier-Roboter. 
