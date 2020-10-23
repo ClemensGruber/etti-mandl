@@ -54,8 +54,8 @@
 // #include <Arduino.h>
 #include <AccelStepper.h> // für Schrittmotor. https://www.airspayce.com/mikem/arduino/AccelStepper/classAccelStepper.html
 #include <Preferences.h>  // für EEPROM
-#include <ESP32_Servo.h>  // https://github.com/jkb-git/ESP32Servo
-
+//#include <ESP32_Servo.h>  // https://github.com/jkb-git/ESP32Servo
+#include <ServoEasing.h>
 
 //Display
 #include <Arduino.h>
@@ -129,7 +129,8 @@ Preferences preferences;
 
 // Initialisierung des Servos für den Datumsstempel
 #ifdef USE_STEMPEL
-Servo servo;
+//Servo servo;
+ServoEasing servo;
 #endif
 
 
@@ -144,8 +145,9 @@ int LastSteps;                   // Benötigte Schritte des Schrittmotors für d
 int MaxSpeed = 400;                  // Schrittmotor Maximalgeschwindigkeit
 int Acceleration = 100;              // Schrittmotor Beschleunigung (höher = schneller)
 int CreepSpeed = 50;                 // Schrittmotor Langsamfahrt am Etikettende
-int WinkelRuhe = 50;                   // Stempelposition in Ruhestellung
-int WinkelAktiv = 100;                   // Stempelposition beim Stempeln
+int WinkelRuhe = 10;                   // Stempelposition in Ruhestellung
+int WinkelAktiv = 150;                   // Stempelposition beim Stempeln
+int EasingSpeed = 80;                   // Geschwindigkeit der Servo-Bewegung
 long preferences_chksum;        // Checksumme, damit wir nicht sinnlos Prefs schreiben
 enum MODUS {RUHE, START, SCHLEICHEN, ENDE};
 byte modus = RUHE;
@@ -206,7 +208,10 @@ void setup()
 
 
 #ifdef USE_STEMPEL
+
   servo.attach(servo_pin);
+  servo.setSpeed(EasingSpeed);
+  servo.setEasingType(EASE_CUBIC_IN_OUT);
   servo.write(WinkelRuhe);
 #endif
 
@@ -538,9 +543,11 @@ void loop()
     u8g2.print("Stempeln");
     u8g2.sendBuffer();
 
-    servo.write(WinkelAktiv);
-    delay(500);
-    servo.write(WinkelRuhe);
+    //servo.write(WinkelAktiv);
+    servo.startEaseTo(WinkelAktiv);
+    delay(1500);
+    //servo.write(WinkelRuhe);
+    servo.startEaseTo(WinkelRuhe);
     delay(500);
 #endif
 
