@@ -54,8 +54,12 @@
 // #include <Arduino.h>
 #include <AccelStepper.h> // für Schrittmotor. https://www.airspayce.com/mikem/arduino/AccelStepper/classAccelStepper.html
 #include <Preferences.h>  // für EEPROM
-//#include <ESP32_Servo.h>  // https://github.com/jkb-git/ESP32Servo
-#include <ServoEasing.h>
+#include <ESP32_Servo.h>  // https://github.com/jkb-git/ESP32Servo
+
+// Encoder
+#include <ESP32Encoder.h>
+ESP32Encoder encoder;
+
 
 //Display
 #include <Arduino.h>
@@ -86,7 +90,7 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
 
 // Ab hier nur verstellen wenn Du genau weisst, was Du tust!
 //
-#define isDebug             // serielle debug-Ausgabe aktivieren. 
+//#define isDebug             // serielle debug-Ausgabe aktivieren.
 
 
 
@@ -129,8 +133,7 @@ Preferences preferences;
 
 // Initialisierung des Servos für den Datumsstempel
 #ifdef USE_STEMPEL
-//Servo servo;
-ServoEasing servo;
+Servo servo;
 #endif
 
 
@@ -142,15 +145,16 @@ ServoEasing servo;
 volatile long temp, target, Position = 0;  // This variable will increase or decrease depending on the rotation of encoder
 int Length;                        // Etikettenlänge in Schritten (Rotary) = Zielgröße
 int LastSteps;                   // Benötigte Schritte des Schrittmotors für das letzte Etikett
-int MaxSpeed = 400;                  // Schrittmotor Maximalgeschwindigkeit
-int Acceleration = 100;              // Schrittmotor Beschleunigung (höher = schneller)
-int CreepSpeed = 50;                 // Schrittmotor Langsamfahrt am Etikettende
-int WinkelRuhe = 10;                   // Stempelposition in Ruhestellung
-int WinkelAktiv = 150;                   // Stempelposition beim Stempeln
-int EasingSpeed = 80;                   // Geschwindigkeit der Servo-Bewegung
+int MaxSpeed = 2000;                  // Schrittmotor Maximalgeschwindigkeit
+int Acceleration = 1000;              // Schrittmotor Beschleunigung (höher = schneller)
+int CreepSpeed = 1000;                 // Schrittmotor Langsamfahrt am Etikettende
+int WinkelRuhe = 50;                   // Stempelposition in Ruhestellung
+int WinkelAktiv = 100;                   // Stempelposition beim Stempeln
 long preferences_chksum;        // Checksumme, damit wir nicht sinnlos Prefs schreiben
 enum MODUS {RUHE, START, SCHLEICHEN, ENDE};
 byte modus = RUHE;
+
+
 
 
 
@@ -182,18 +186,16 @@ void setup()
 
   // Rotary Encoder groß
   //----------------
-  pinMode(RotaryA, INPUT_PULLUP); // internal pullup
-  pinMode(RotaryB, INPUT_PULLUP); // internal pullup
+  ESP32Encoder::useInternalWeakPullResistors = UP;
+
+  encoder.attachHalfQuad(16, 17);
+  encoder.clearCount();
+
+  //pinMode(RotaryA, INPUT_PULLUP); // internal pullup
+  //pinMode(RotaryB, INPUT_PULLUP); // internal pullup
 
   // Schrittmotor Enable
   pinMode(enable_pin, OUTPUT); // DRV8025 ENABLE // TODO: Prüfen ob erforderlich, da Accelstepper verwendet wird
-
-
-  // Interrupts festlegen für großen Rotary Encoder
-  //A rising pulse from encodenren activated ai0().
-  attachInterrupt(digitalPinToInterrupt(RotaryA), ai0, RISING);
-  //B rising pulse from encodenren activated ai1().
-  attachInterrupt(digitalPinToInterrupt(RotaryB), ai1, RISING);
 
 
   // SCHRITTMOTORGRUNDEINSTELLUNGEN
@@ -208,10 +210,7 @@ void setup()
 
 
 #ifdef USE_STEMPEL
-
   servo.attach(servo_pin);
-  servo.setSpeed(EasingSpeed);
-  servo.setEasingType(EASE_CUBIC_IN_OUT);
   servo.write(WinkelRuhe);
 #endif
 
@@ -269,12 +268,16 @@ void setup()
 void loop()
 {
 
+  Position = encoder.getCount();
+
+
+
   // großen Rotary-Encoder erfassen (Position des Etiketts)
-  if ( Position != temp ) {
-    temp = Position;
-    // Serial.print ("Rotary-Pos: ");
-    // Serial.println (Position);
-  }
+  // if ( Position != temp ) {
+  //   temp = Position;
+  //  Serial.print ("Rotary-Pos: ");
+  // Serial.println (Position);
+  // }
 
   /*
     #ifdef isDebug
@@ -389,6 +392,7 @@ void loop()
   {
 
     Position = 0; // Position des Rotary Encoders auf 0 setzen
+    encoder.clearCount();
 #ifdef isDebug
     Serial.println("Startsensor erkannt");
     Serial.print("Length: ");
@@ -427,7 +431,7 @@ void loop()
       stepper.setCurrentPosition(0);
       stepper.setAcceleration(Acceleration); // ggf brauch man das hier nicht nochmal.
       stepper.setMaxSpeed(MaxSpeed); // Maximale Geschwindigkeit
-      stepper.moveTo(LastSteps * 0.9); //  Fahre mit ca 90% des Etiketts mit Speed (etwas weniger, da nur bis Creepspeed)
+      stepper.moveTo(LastSteps*0.95); //  Fahre mit ca 95% des Etiketts mit Speed (etwas weniger, da nur bis Creepspeed)
 
 #ifdef isDebug
       Serial.println("Vorbereitungen");
@@ -543,11 +547,9 @@ void loop()
     u8g2.print("Stempeln");
     u8g2.sendBuffer();
 
-    //servo.write(WinkelAktiv);
-    servo.startEaseTo(WinkelAktiv);
-    delay(1500);
-    //servo.write(WinkelRuhe);
-    servo.startEaseTo(WinkelRuhe);
+    servo.write(WinkelAktiv);
+    delay(500);
+    servo.write(WinkelRuhe);
     delay(500);
 #endif
 
@@ -603,28 +605,6 @@ void loop()
 //################################################# FUNKTIONEN #############################################
 
 
-
-// Rotary Encoder Interrupt1
-void ai0() {
-  // ai0 is activated if DigitalPin nr 2 is going from LOW to HIGH
-  // Check pin 3 to determine the direction
-  if (digitalRead(RotaryB) == LOW) {
-    Position++;
-  } else {
-    Position--;
-  }
-}
-
-// Rotary Encoder Interrupt2
-void ai1() {
-  // ai0 is activated if DigitalPin nr 3 is going from LOW to HIGH
-  // Check with pin 2 to determine the direction
-  if (digitalRead(RotaryA) == LOW) {
-    Position--;
-  } else {
-    Position++;
-  }
-}
 
 
 void getPreferences(void) // Daten aus Eeprom lesen
