@@ -6,6 +6,8 @@
                             Den Code kann jeder frei verwenden, ändern und hochladen wo er will,
                             solange er nicht seinen eigenen Namen drüber setzt, oder diesen kommerziell verwertet, beispielsweise
                             indem Etikettiermaschinen mit diesem Code versehen und verkauft werden.
+  2020-10-29 Marc Junker    Ansteuerung des Stempels auf ServoEasing umgestellt.                          
+
 
 */
 
@@ -54,7 +56,7 @@
 // #include <Arduino.h>
 #include <AccelStepper.h> // für Schrittmotor. https://www.airspayce.com/mikem/arduino/AccelStepper/classAccelStepper.html
 #include <Preferences.h>  // für EEPROM
-#include <ESP32_Servo.h>  // https://github.com/jkb-git/ESP32Servo
+//#include <ESP32_Servo.h>  // https://github.com/jkb-git/ESP32Servo
 
 // Encoder
 #include <ESP32Encoder.h>
@@ -133,7 +135,9 @@ Preferences preferences;
 
 // Initialisierung des Servos für den Datumsstempel
 #ifdef USE_STEMPEL
-Servo servo;
+//Servo servo;
+#include <ServoEasing.h>
+ServoEasing servo;
 #endif
 
 
@@ -141,16 +145,17 @@ Servo servo;
 
 // Allgemeine Variablen
 
-//int i;                             // allgemeine Zählvariable
+//int i;                                   // allgemeine Zählvariable
 volatile long temp, target, Position = 0;  // This variable will increase or decrease depending on the rotation of encoder
-int Length;                        // Etikettenlänge in Schritten (Rotary) = Zielgröße
-int LastSteps;                   // Benötigte Schritte des Schrittmotors für das letzte Etikett
-int MaxSpeed = 2000;                  // Schrittmotor Maximalgeschwindigkeit
-int Acceleration = 1000;              // Schrittmotor Beschleunigung (höher = schneller)
-int CreepSpeed = 1000;                 // Schrittmotor Langsamfahrt am Etikettende
-int WinkelRuhe = 50;                   // Stempelposition in Ruhestellung
-int WinkelAktiv = 100;                   // Stempelposition beim Stempeln
-long preferences_chksum;        // Checksumme, damit wir nicht sinnlos Prefs schreiben
+int Length;                                // Etikettenlänge in Schritten (Rotary) = Zielgröße
+int LastSteps;                             // Benötigte Schritte des Schrittmotors für das letzte Etikett
+int MaxSpeed = 300;                        // Schrittmotor Maximalgeschwindigkeit
+int Acceleration = 300;                    // Schrittmotor Beschleunigung (höher = schneller)
+int CreepSpeed = 150;                      // Schrittmotor Langsamfahrt am Etikettende
+int WinkelRuhe = 10;                       // Stempelposition in Ruhestellung
+int WinkelAktiv = 110;                     // Stempelposition beim Stempeln
+int ServoSpeed = 100;                      // Geschwindigkeit des Servo-Arms 
+long preferences_chksum;                   // Checksumme, damit wir nicht sinnlos Prefs schreiben
 enum MODUS {RUHE, START, SCHLEICHEN, ENDE};
 byte modus = RUHE;
 
@@ -211,6 +216,8 @@ void setup()
 
 #ifdef USE_STEMPEL
   servo.attach(servo_pin);
+  servo.setEasingType(EASE_CUBIC_IN_OUT);
+  servo.setSpeed(ServoSpeed); 
   servo.write(WinkelRuhe);
 #endif
 
@@ -305,7 +312,7 @@ void loop()
   // --------------------------------------------- ETIKETT VORSPULEN -------------------------------------------
 
 
-  if (digitalRead(button1) == HIGH && modus == RUHE) // Etikett vorspulen
+  if (digitalRead(button1) == LOW && modus == RUHE) // Etikett vorspulen
   {
     stepper.enableOutputs(); //enable pins
     target = stepper.currentPosition() + 4;
@@ -340,7 +347,7 @@ void loop()
 
   // --------------------------------------------- ETIKETT ZURÜCKSPULEN -------------------------------------------
 
-  if (digitalRead(button2) == HIGH && modus == RUHE) // Etikett zurückspulen
+  if (digitalRead(button2) == LOW && modus == RUHE) // Etikett zurückspulen
   {
     stepper.enableOutputs(); //enable pins
     target = stepper.currentPosition() - 4;
@@ -376,7 +383,7 @@ void loop()
   // ------------------------------------------------ LÄNGE SPEICHERN ----------------------------------------------
 
   // aktuelle Position als Etikettenlänge speichern
-  if (digitalRead(buttonsave) == HIGH && modus == RUHE) // Länge speichern // ggf ersetzen durch RotarySW
+  if (digitalRead(buttonsave) == LOW && modus == RUHE) // Länge speichern // ggf ersetzen durch RotarySW
   {
 #ifdef isDebug
     Serial.println("Speichern");
@@ -547,9 +554,11 @@ void loop()
     u8g2.print("Stempeln");
     u8g2.sendBuffer();
 
-    servo.write(WinkelAktiv);
+    //servo.write(WinkelAktiv);
+    servo.easeTo(WinkelAktiv);
     delay(500);
-    servo.write(WinkelRuhe);
+    //servo.write(WinkelRuhe);
+    servo.easeTo(WinkelRuhe);
     delay(500);
 #endif
 
