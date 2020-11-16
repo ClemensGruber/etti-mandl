@@ -6,7 +6,10 @@
                             Den Code kann jeder frei verwenden, ändern und hochladen wo er will,
                             solange er nicht seinen eigenen Namen drüber setzt, oder diesen kommerziell verwertet, beispielsweise
                             indem Etikettiermaschinen mit diesem Code versehen und verkauft werden.
-  2020-10-29 Marc Junker    Ansteuerung des Stempels auf ServoEasing umgestellt.                          
+  2020-10-29 Marc Junker    Ansteuerung des Stempels auf ServoEasing umgestellt.    
+  2020-11-14 Marc Junker    StartSensorPin von 23 auf 25 umgestellt. Sensor-Abfrage von ttl auf analog geändert. OTA eingebaut.
+                            Auslagerung der Konfiguration in etti-mandl.h
+                                              
 
 
 */
@@ -32,10 +35,13 @@
                  4    5
                  5    18
 
-  Start-Sensor        23
+  Start-Sensor        25     (zuvor 23)  // MarcN
   Servo               19
 
 */
+
+
+const char versionTag[] = "ver0.2";
 
 
 
@@ -57,6 +63,13 @@
 #include <AccelStepper.h> // für Schrittmotor. https://www.airspayce.com/mikem/arduino/AccelStepper/classAccelStepper.html
 #include <Preferences.h>  // für EEPROM
 //#include <ESP32_Servo.h>  // https://github.com/jkb-git/ESP32Servo
+#include "etti-mandl.h"
+
+// OTA
+#include <WiFi.h>
+#include <ESPmDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
 
 // Encoder
 #include <ESP32Encoder.h>
@@ -96,36 +109,7 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
 
 
 
-// ** Definition der pins
-// ----------------------
 
-const byte enable_pin = 14;    // Schrittmotor Enable-Pin
-const byte step_pin = 33;
-const byte dir_pin = 32;
-
-// Rotary Encoder (Inkrementaler Drehgeber für Etikettenposition)
-// Grün = A-Phase, Weiß = B-Phase, Rot = Vcc-Leistung +, Schwarz = V0
-const byte RotaryA  = 16;      // A-Phase
-const byte RotaryB  = 17;      // B-Phase
-
-
-// Rotary Encoder klein für Steuerung
-//const int outputA  = 34; // CLK
-//const int outputB  = 35; // DT
-//const int outputSW = 13;
-
-
-// Servo
-const byte servo_pin = 19;     // Servo für Stempel
-
-
-// Start-Sensor
-const byte start_pin = 23;
-
-// 2 Buttons - ggf. ersetzen durch kleinen Rotary
-const byte button1 = 15;
-const byte button2 = 2;
-const byte buttonsave = 4;
 
 // Initialisierung des Schrittmotors
 AccelStepper stepper(2, step_pin, dir_pin); // Motortyp, STEP_PIN, DIR_PIN
@@ -142,27 +126,6 @@ ServoEasing servo;
 
 
 
-
-// Allgemeine Variablen
-
-//int i;                                   // allgemeine Zählvariable
-volatile long temp, target, Position = 0;  // This variable will increase or decrease depending on the rotation of encoder
-int Length;                                // Etikettenlänge in Schritten (Rotary) = Zielgröße
-int LastSteps;                             // Benötigte Schritte des Schrittmotors für das letzte Etikett
-int MaxSpeed = 300;                        // Schrittmotor Maximalgeschwindigkeit
-int Acceleration = 300;                    // Schrittmotor Beschleunigung (höher = schneller)
-int CreepSpeed = 150;                      // Schrittmotor Langsamfahrt am Etikettende
-int WinkelRuhe = 10;                       // Stempelposition in Ruhestellung
-int WinkelAktiv = 110;                     // Stempelposition beim Stempeln
-int ServoSpeed = 100;                      // Geschwindigkeit des Servo-Arms 
-long preferences_chksum;                   // Checksumme, damit wir nicht sinnlos Prefs schreiben
-enum MODUS {RUHE, START, SCHLEICHEN, ENDE};
-byte modus = RUHE;
-
-
-
-
-
 //################################################# SETUP #############################################
 
 
@@ -172,6 +135,68 @@ void setup()
   Serial.begin(115200);
   // while (!Serial) {
   //   }
+
+
+////////////////////////////// OTA
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  while (WiFi.waitForConnectResult() != WL_CONNECTED) {
+    //Serial.println("Connection Failed! Rebooting...");
+    delay(5000);
+    ESP.restart();
+  }
+
+  // Port defaults to 3232
+  // ArduinoOTA.setPort(3232);
+
+  // Hostname defaults to esp3232-[MAC]
+  ArduinoOTA.setHostname("EttiMandl");
+
+  // No authentication by default
+  // ArduinoOTA.setPassword("admin");
+
+  // Password can be set with it's md5 value as well
+  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+
+  ArduinoOTA
+    .onStart([]() {
+      String type;
+      if (ArduinoOTA.getCommand() == U_FLASH)
+        type = "sketch";
+      else // U_SPIFFS
+        type = "filesystem";
+
+      // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+      //Serial.println("Start updating " + type);
+    })
+    .onEnd([]() {
+      //Serial.println("\nEnd");
+    })
+    .onProgress([](unsigned int progress, unsigned int total) {
+      //Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    })
+    .onError([](ota_error_t error) {
+      //Serial.printf("Error[%u]: ", error);
+      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+      else if (error == OTA_END_ERROR) Serial.println("End Failed");
+    });
+
+  ArduinoOTA.begin();
+
+  //Serial.println("Ready");
+  //Serial.print("IP address: ");
+  //Serial.println(WiFi.localIP());
+
+////////////////////////////////////
+
+
+
+
 
 
 #ifdef isDebug
@@ -274,6 +299,9 @@ void setup()
 
 void loop()
 {
+
+  // OTA
+  ArduinoOTA.handle();
 
   Position = encoder.getCount();
 
@@ -395,7 +423,7 @@ void loop()
   // ---------------------------------------------- Etikettiervorgang -------------------------------------------------
   // ------------------------------------------------------------------------------------------------------------------
 
-  if (digitalRead(start_pin) == LOW && modus == RUHE)  //Sensor erkannt -> Start
+  if (readStartSensor() == LOW && modus == RUHE)  //Sensor erkannt -> Start
   {
 
     Position = 0; // Position des Rotary Encoders auf 0 setzen
@@ -421,16 +449,29 @@ void loop()
     }
 
     else {
+ /*
       //Displayausgabe
       u8g2.clearBuffer();          // clear the internal memory
       u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
       u8g2.setCursor(0, 15); // spalte zeile
       u8g2.print("START");
       u8g2.sendBuffer();
-
+*/
 
       modus = START;
-      delay(1500);
+
+      for (int i = 4; i>0; i--) {
+         u8g2.clearBuffer();          // clear the internal memory
+         u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+         u8g2.setCursor(0, 15); // spalte zeile
+         u8g2.print("START in ");
+         u8g2.print(i);
+         u8g2.sendBuffer();
+         delay(1000);
+      }
+      
+      //delay(1500);
+
 
       // ----------------------------------------------  Vorbereitungen ------------------------------------
 
@@ -584,14 +625,16 @@ void loop()
     u8g2.setCursor(50, 55);
     u8g2.print(Position);
     u8g2.sendBuffer();
-    delay(3000);
-
-
-    while  (digitalRead(start_pin) == LOW) // Warten bis Glas entnommen wird.
-    {
-      delay(1);
+    //delay(3000);
+    // Mein Startsensor prellt. Deshalb 500ms zwischen zwei LOWs abwarten 
+    timeIdle = millis();
+    while ( (millis() - timeIdle) < 1000) {
+    if (readStartSensor() == LOW) {
+      timeIdle = millis();
+      //Serial.println("wait..pressed");
+      }
+    delay(1);
     }
-
 
     // Displayausgabe
     u8g2.clearBuffer();          // clear the internal memory
@@ -599,9 +642,9 @@ void loop()
     u8g2.setCursor(0, 15); // spalte zeile
     u8g2.print("Glas einlegen");
     u8g2.sendBuffer();
-
+    delay(1000);
     modus = RUHE;
-    delay(1500);  // Zeit um Glas zu entnehmen
+    //delay(1500);  // Zeit um Glas zu entnehmen
 
   } // Etikettieren ende
 
@@ -613,7 +656,17 @@ void loop()
 
 //################################################# FUNKTIONEN #############################################
 
-
+// MarcN
+boolean readStartSensor()
+{
+  if (analogRead(start_pin) < highLowSchwelle) {
+    return LOW;
+  }
+  else {
+    return HIGH;
+  }
+   
+}
 
 
 void getPreferences(void) // Daten aus Eeprom lesen
@@ -634,10 +687,10 @@ void getPreferences(void) // Daten aus Eeprom lesen
   u8g2.clearBuffer();          // clear the internal memory
   u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
   u8g2.setCursor(0, 15); // spalte zeile
-  u8g2.print("geladen:");
+  u8g2.print("Geladene");
   u8g2.setCursor(0, 30); // x y
-  u8g2.print("Länge:");
-  u8g2.setCursor(50, 30);
+  u8g2.print("Etikettenlänge:");
+  u8g2.setCursor(0, 50);
   u8g2.print(Length);
   u8g2.sendBuffer();
   delay(3000);
@@ -740,7 +793,7 @@ void print_logo() {
   u8g2.setCursor(85, 27);    u8g2.print("ETTI");
   u8g2.setCursor(75, 43);    u8g2.print("MANDL");
   u8g2.setFont(u8g2_font_courB08_tf);
-  u8g2.setCursor(85, 64);    u8g2.print("v.0.1");
+  u8g2.setCursor(85, 64);    u8g2.print(versionTag);
   u8g2.sendBuffer();
   delay(2000);
   u8g2.clearBuffer();
