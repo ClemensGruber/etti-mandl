@@ -2,8 +2,8 @@
 
 
 
-const char* ssid = "xxx";
-const char* password = "yyy";
+const char* ssid = "";
+const char* password = "";
 
 // ** Definition der pins
 // ----------------------
@@ -43,15 +43,19 @@ const byte buttonsave = 4;
 volatile long temp, target, Position = 0;  // This variable will increase or decrease depending on the rotation of encoder
 int Length;                                // Etikettenlänge in Schritten (Rotary) = Zielgröße
 int LastSteps;                             // Benötigte Schritte des Schrittmotors für das letzte Etikett
-int MaxSpeed = 4500;                        // Schrittmotor Maximalgeschwindigkeit
-int Acceleration = 2300;                    // Schrittmotor Beschleunigung (höher = schneller)
-int CreepSpeed = 2000;                      // Schrittmotor Langsamfahrt am Etikettende
-int WinkelRuhe = 10;                       // Stempelposition in Ruhestellung
-int WinkelAktiv = 110;                     // Stempelposition beim Stempeln
-int ServoSpeed = 100;                      // Geschwindigkeit des Servo-Arms 
+int manualStep = 50;                       // Anzahl Schritte je manuellem spulen 
+int MaxSpeed = 5000;                        // Schrittmotor Maximalgeschwindigkeit
+int Acceleration = 4000;                    // Schrittmotor Beschleunigung (höher = schneller)
+int CreepSpeed = 3000;                      // Schrittmotor Langsamfahrt am Etikettende
+int WinkelRuhe = 3;                       // Stempelposition in Ruhestellung
+int WinkelAktiv = 69;                     // Stempelposition beim Stempeln
+int StempelPause = 200;                     // Zeit für das Aufdrücken des Stempels
+int StempelTrockenTupfen = 2;             // Wiederholungen zum trockentupfen 
+int ServoSpeed = 70;                      // Geschwindigkeit des Servo-Arms 
+
 long preferences_chksum;                   // Checksumme, damit wir nicht sinnlos Prefs schreiben
-enum MODUS {RUHE, START, SCHLEICHEN, ENDE};
-byte modus = RUHE;
+enum MODUS {RUHE, START, SCHLEICHEN, ENDE, BOOT};
+byte modus = BOOT;
 unsigned long timeIdle;
 
 const int highLowSchwelle = 1200;           // Grenze des StartSensors zwischen HIGH / LOW 

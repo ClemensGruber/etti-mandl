@@ -6,10 +6,10 @@
                             Den Code kann jeder frei verwenden, ändern und hochladen wo er will,
                             solange er nicht seinen eigenen Namen drüber setzt, oder diesen kommerziell verwertet, beispielsweise
                             indem Etikettiermaschinen mit diesem Code versehen und verkauft werden.
-  2020-10-29 Marc Junker    Ansteuerung des Stempels auf ServoEasing umgestellt.    
+  2020-10-29 Marc Junker    Ansteuerung des Stempels auf ServoEasing umgestellt.
   2020-11-14 Marc Junker    StartSensorPin von 23 auf 25 umgestellt. Sensor-Abfrage von ttl auf analog geändert. OTA eingebaut.
                             Auslagerung der Konfiguration in etti-mandl.h
-                                              
+
 
 
 */
@@ -44,6 +44,21 @@
 const char versionTag[] = "ver0.2";
 
 
+//
+// Hier den Code auf die verwendete Hardware einstellen
+//
+
+#define USE_STEMPEL           // Datumsstempeleinheit vorhanden
+
+
+// Ab hier nur verstellen wenn Du genau weisst, was Du tust!
+//
+//#define isDebug             // serielle debug-Ausgabe aktivieren.
+
+// OTA Support. Experimenteller Beta-Betrieb
+//#define useOTA
+
+
 
 // Strom messen und einstellen: http://sturm.selfhost.eu/wordpress/pololu-schrittmotortreiber-einstellen/
 
@@ -53,9 +68,11 @@ const char versionTag[] = "ver0.2";
 // Vref = 1,19A x 5 x 0,1Ohm=0,595 Volt
 
 // Rot A4988: mit mittl. Motor max 1,7 A
-//Vref = Imax x (8 x Rs) mit Rs zu 0,05Ohm.
+// Vref = Imax x (8 x Rs) mit Rs zu 0,05Ohm.
 // Vref = 1,19 x 8 x 0,05 = 0,476 Volt
 // Einstellen zwischen Poti-Mitte und Masse
+
+
 
 
 
@@ -65,15 +82,19 @@ const char versionTag[] = "ver0.2";
 //#include <ESP32_Servo.h>  // https://github.com/jkb-git/ESP32Servo
 #include "etti-mandl.h"
 
+
 // OTA
+#ifdef useOTA
 #include <WiFi.h>
 #include <ESPmDNS.h>
 #include <WiFiUdp.h>
 #include <ArduinoOTA.h>
+#endif
 
 // Encoder
 #include <ESP32Encoder.h>
 ESP32Encoder encoder;
+ESP32Encoder encoderSmall;
 
 
 //Display
@@ -96,17 +117,6 @@ U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
 
 
 
-//
-// Hier den Code auf die verwendete Hardware einstellen
-//
-
-#define USE_STEMPEL           // Datumsstempeleinheit vorhanden
-
-
-// Ab hier nur verstellen wenn Du genau weisst, was Du tust!
-//
-//#define isDebug             // serielle debug-Ausgabe aktivieren.
-
 
 
 
@@ -119,7 +129,6 @@ Preferences preferences;
 
 // Initialisierung des Servos für den Datumsstempel
 #ifdef USE_STEMPEL
-//Servo servo;
 #include <ServoEasing.h>
 ServoEasing servo;
 #endif
@@ -136,8 +145,18 @@ void setup()
   // while (!Serial) {
   //   }
 
+  // Boot Screen
+  u8g2.begin();
+  u8g2.enableUTF8Print();
+  u8g2.clearBuffer();
+  print_logo();
+  delay(2000);
+  u8g2.clearBuffer();          // clear the internal memory
 
-////////////////////////////// OTA
+
+  ////////////////////////////// OTA
+
+#ifdef useOTA
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
@@ -161,40 +180,55 @@ void setup()
   // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
 
   ArduinoOTA
-    .onStart([]() {
-      String type;
-      if (ArduinoOTA.getCommand() == U_FLASH)
-        type = "sketch";
-      else // U_SPIFFS
-        type = "filesystem";
+  .onStart([]() {
+    String type;
+    if (ArduinoOTA.getCommand() == U_FLASH)
+      type = "sketch";
+    else // U_SPIFFS
+      type = "filesystem";
 
-      // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
-      //Serial.println("Start updating " + type);
-    })
-    .onEnd([]() {
-      //Serial.println("\nEnd");
-    })
-    .onProgress([](unsigned int progress, unsigned int total) {
-      //Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
-    })
-    .onError([](ota_error_t error) {
-      //Serial.printf("Error[%u]: ", error);
-      if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
-      else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
-      else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
-      else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
-      else if (error == OTA_END_ERROR) Serial.println("End Failed");
-    });
+    // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+    //Serial.println("Start updating " + type);
+    u8g2.clearBuffer();          // clear the internal memory
+    u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+
+    u8g2.setCursor(0, 10); // spalte zeile
+    u8g2.print("Receiving");
+    u8g2.setCursor(0, 30); // spalte zeile
+    u8g2.print("OTA Update");
+
+
+    u8g2.sendBuffer();
+  })
+  .onEnd([]() {
+    //Serial.println("\nEnd");
+    u8g2.setCursor(0, 70); // spalte zeile
+    u8g2.printf("Done !");
+  })
+  .onProgress([](unsigned int progress, unsigned int total) {
+    //Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+    u8g2.setCursor(0, 50); // spalte zeile
+    u8g2.printf("Progress: %u%%\r", (progress / (total / 100)));
+    u8g2.sendBuffer();
+  })
+  .onError([](ota_error_t error) {
+    //Serial.printf("Error[%u]: ", error);
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
+  });
 
   ArduinoOTA.begin();
+
+#endif
 
   //Serial.println("Ready");
   //Serial.print("IP address: ");
   //Serial.println(WiFi.localIP());
 
-////////////////////////////////////
-
-
+  ////////////////////////////////////
 
 
 
@@ -221,6 +255,14 @@ void setup()
   encoder.attachHalfQuad(16, 17);
   encoder.clearCount();
 
+  // Rotary Encoder klein
+  //----------------
+  encoderSmall.attachHalfQuad(34, 35);
+  //encoderSmall.attachfullQuad(34, 35);
+  encoderSmall.clearCount();
+
+
+
   //pinMode(RotaryA, INPUT_PULLUP); // internal pullup
   //pinMode(RotaryB, INPUT_PULLUP); // internal pullup
 
@@ -242,18 +284,10 @@ void setup()
 #ifdef USE_STEMPEL
   servo.attach(servo_pin);
   servo.setEasingType(EASE_CUBIC_IN_OUT);
-  servo.setSpeed(ServoSpeed); 
+  servo.setSpeed(ServoSpeed);
   servo.write(WinkelRuhe);
 #endif
 
-
-  // Boot Screen
-  u8g2.begin();
-  u8g2.enableUTF8Print();
-  u8g2.clearBuffer();
-  print_logo();
-  delay(2000);
-  u8g2.clearBuffer();          // clear the internal memory
 
 
 
@@ -278,7 +312,7 @@ void setup()
 
     u8g2.setCursor(0, 15); // spalte zeile
     u8g2.print("Etikettenlänge");
-    u8g2.setCursor(50, 15);
+    u8g2.setCursor(0, 30);
     u8g2.print("einstellen!");
 
     u8g2.sendBuffer();          // transfer internal memory to the display
@@ -288,7 +322,41 @@ void setup()
     u8g2.clearBuffer();          // clear the internal memory
   }
 
-  delay(2000);
+
+
+  /*
+    servo.easeTo(WinkelRuhe);
+    delay(2000);
+
+
+    while (true) {
+      //servo.easeTo( (int)encoderSmallgetCounthalf());
+         u8g2.clearBuffer();
+          u8g2.setCursor(0, 30);
+      u8g2.print((int)encoderSmallgetCounthalf());
+       u8g2.sendBuffer();
+      delay(200);
+      if (digitalRead(13) == LOW) {
+        servo.easeTo(WinkelAktiv);
+        servo.easeTo(WinkelAktiv-10);
+        delay(StempelPause);
+        servo.easeTo(WinkelAktiv);
+        servo.easeTo(WinkelAktiv-10);
+        delay(StempelPause);
+        servo.easeTo(WinkelAktiv);
+        servo.easeTo(WinkelAktiv-10);
+        delay(StempelPause);
+        servo.easeTo(WinkelAktiv);
+        servo.easeTo(WinkelAktiv-10);
+        delay(StempelPause);
+        servo.easeTo(WinkelAktiv);
+        servo.easeTo(WinkelAktiv-10);
+        delay(StempelPause);
+        servo.easeTo(WinkelAktiv);
+        servo.easeTo(WinkelRuhe);
+      }
+      };
+  */
 
 
 } // Ende Setup
@@ -299,9 +367,10 @@ void setup()
 
 void loop()
 {
-
   // OTA
+#ifdef useOTA
   ArduinoOTA.handle();
+#endif
 
   Position = encoder.getCount();
 
@@ -328,6 +397,27 @@ void loop()
   */
 
 
+  // ------ RotarySmall Testing ----------------------------------------------------
+  if (digitalRead(13) == LOW && (modus == RUHE || modus == BOOT)) {
+    u8g2.clearBuffer();          // clear the internal memory
+    u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+
+    u8g2.setCursor(0, 15); // x y
+    u8g2.print("RotS:");
+    u8g2.setCursor(60, 15);
+    u8g2.print(((int)encoderSmallgetCounthalf()));
+    /*
+        u8g2.setCursor(0, 30); // x y
+        u8g2.print("Step:");
+        u8g2.setCursor(50, 30);
+        u8g2.print(stepper.currentPosition());
+    */
+    u8g2.sendBuffer();
+
+  }
+
+
+
   // ------------------------------------------------------------------------------------------------------------------
   // ----------------------------- ETIKETTENLÄNGE FESTLEGEN BZW. VOR- UND ZURÜCKSPULEN --------------------------------
   // ------------------------------------------------------------------------------------------------------------------
@@ -340,10 +430,10 @@ void loop()
   // --------------------------------------------- ETIKETT VORSPULEN -------------------------------------------
 
 
-  if (digitalRead(button1) == LOW && modus == RUHE) // Etikett vorspulen
+  if (digitalRead(button1) == LOW && modus == BOOT) // Etikett vorspulen
   {
     stepper.enableOutputs(); //enable pins
-    target = stepper.currentPosition() + 4;
+    target = stepper.currentPosition() + manualStep;
     stepper.moveTo(target);
 
     while (stepper.distanceToGo() != 0)
@@ -367,6 +457,8 @@ void loop()
 
     u8g2.sendBuffer();          // transfer internal memory to the display
 
+    Length = Position;
+
 #ifdef isDebug
     Serial.print("Button1+ ");
     Serial.println(Position);
@@ -375,10 +467,10 @@ void loop()
 
   // --------------------------------------------- ETIKETT ZURÜCKSPULEN -------------------------------------------
 
-  if (digitalRead(button2) == LOW && modus == RUHE) // Etikett zurückspulen
+  if (digitalRead(button2) == LOW && modus == BOOT) // Etikett zurückspulen
   {
     stepper.enableOutputs(); //enable pins
-    target = stepper.currentPosition() - 4;
+    target = stepper.currentPosition() - manualStep;
     stepper.moveTo(target);
 
     while (stepper.distanceToGo() != 0)
@@ -400,6 +492,48 @@ void loop()
     u8g2.print(stepper.currentPosition());
 
     u8g2.sendBuffer();         // transfer internal memory to the display
+    Length = Position;
+#ifdef isDebug
+    Serial.print("Button2- Schleife ");
+    Serial.println(Position);
+#endif
+  }
+
+
+  // ----------------------------------------------- Länge verkürzen ---------------------------
+  if (digitalRead(button2) == LOW && modus == RUHE) // Etikettlänge anpassen
+  {
+
+    u8g2.clearBuffer();          // clear the internal memory
+    u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+    Length--;
+    Position = Length;
+    delay(100);
+    u8g2.setCursor(0, 15); // x y
+    u8g2.print("Länge:");
+    u8g2.setCursor(50, 15);
+    u8g2.print(Length);
+    u8g2.sendBuffer();         // transfer internal memory to the display
+
+#ifdef isDebug
+    Serial.print("Button2- Schleife ");
+    Serial.println(Position);
+#endif
+  }
+  // ----------------------------------------------- Länge verlängern ---------------------------
+  if (digitalRead(button1) == LOW && modus == RUHE) // Etikettlänge anpassen
+  {
+
+    u8g2.clearBuffer();          // clear the internal memory
+    u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+    Length++;
+    Position = Length;
+    delay(100);
+    u8g2.setCursor(0, 15); // x y
+    u8g2.print("Länge:");
+    u8g2.setCursor(50, 15);
+    u8g2.print(Length);
+    u8g2.sendBuffer();         // transfer internal memory to the display
 
 #ifdef isDebug
     Serial.print("Button2- Schleife ");
@@ -408,22 +542,32 @@ void loop()
   }
 
 
+
   // ------------------------------------------------ LÄNGE SPEICHERN ----------------------------------------------
 
   // aktuelle Position als Etikettenlänge speichern
-  if (digitalRead(buttonsave) == LOW && modus == RUHE) // Länge speichern // ggf ersetzen durch RotarySW
+  if (digitalRead(buttonsave) == LOW && (modus == RUHE || modus == BOOT)) // Länge speichern // ggf ersetzen durch RotarySW
   {
 #ifdef isDebug
     Serial.println("Speichern");
 #endif
+    stepper.stop();
+    stepper.disableOutputs();
     setPreferences();
+    delay(2000);
+    modus = RUHE;
+    u8g2.clearBuffer();          // clear the internal memory
+    u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+    u8g2.setCursor(0, 15); // spalte zeile
+    u8g2.print("Glas einlegen");
+    u8g2.sendBuffer();
   }
 
   // ------------------------------------------------------------------------------------------------------------------
   // ---------------------------------------------- Etikettiervorgang -------------------------------------------------
   // ------------------------------------------------------------------------------------------------------------------
 
-  if (readStartSensor() == LOW && modus == RUHE)  //Sensor erkannt -> Start
+  if (readStartSensor() == LOW && (modus == RUHE || modus == BOOT))  //Sensor erkannt -> Start
   {
 
     Position = 0; // Position des Rotary Encoders auf 0 setzen
@@ -449,27 +593,27 @@ void loop()
     }
 
     else {
- /*
-      //Displayausgabe
-      u8g2.clearBuffer();          // clear the internal memory
-      u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
-      u8g2.setCursor(0, 15); // spalte zeile
-      u8g2.print("START");
-      u8g2.sendBuffer();
-*/
+      /*
+           //Displayausgabe
+           u8g2.clearBuffer();          // clear the internal memory
+           u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+           u8g2.setCursor(0, 15); // spalte zeile
+           u8g2.print("START");
+           u8g2.sendBuffer();
+      */
 
       modus = START;
 
-      for (int i = 4; i>0; i--) {
-         u8g2.clearBuffer();          // clear the internal memory
-         u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
-         u8g2.setCursor(0, 15); // spalte zeile
-         u8g2.print("START in ");
-         u8g2.print(i);
-         u8g2.sendBuffer();
-         delay(1000);
+      for (int i = 2; i > 0; i--) {
+        u8g2.clearBuffer();          // clear the internal memory
+        u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+        u8g2.setCursor(0, 15); // spalte zeile
+        u8g2.print("START in ");
+        u8g2.print(i);
+        u8g2.sendBuffer();
+        delay(1000);
       }
-      
+
       //delay(1500);
 
 
@@ -479,7 +623,8 @@ void loop()
       stepper.setCurrentPosition(0);
       stepper.setAcceleration(Acceleration); // ggf brauch man das hier nicht nochmal.
       stepper.setMaxSpeed(MaxSpeed); // Maximale Geschwindigkeit
-      stepper.moveTo(LastSteps*0.95); //  Fahre mit ca 95% des Etiketts mit Speed (etwas weniger, da nur bis Creepspeed)
+      stepper.moveTo(LastSteps * 0.98); //  Fahre mit ca 95% des Etiketts mit Speed (etwas weniger, da nur bis Creepspeed)
+      //stepper.moveTo(LastSteps); //  Fahre bis zu Schluss..
 
 #ifdef isDebug
       Serial.println("Vorbereitungen");
@@ -582,6 +727,7 @@ void loop()
 
     LastSteps = stepper.currentPosition(); // Neuer Wert für gefahrene Schritte des Schrittmotors
     stepper.stop();
+    stepper.disableOutputs();
 
 
     // ---------------------------------------------------------- Stempeln ----------------------------------------------------
@@ -595,46 +741,49 @@ void loop()
     u8g2.print("Stempeln");
     u8g2.sendBuffer();
 
-    //servo.write(WinkelAktiv);
     servo.easeTo(WinkelAktiv);
-    delay(500);
-    //servo.write(WinkelRuhe);
+    delay(StempelPause);
+
+    for (int i = 0; i <= StempelTrockenTupfen; i++) {
+      servo.easeTo(WinkelAktiv - 10);
+      delay(StempelPause);
+      servo.easeTo(WinkelAktiv);
+      delay(StempelPause);
+    }
+    
     servo.easeTo(WinkelRuhe);
-    delay(500);
+           
 #endif
 
 
 
-    // Endeaktionen
-    //--------------
+           // Endeaktionen
+           //--------------
 
-
-    stepper.disableOutputs();
-
-    //Displayausgabe
-    u8g2.clearBuffer();          // clear the internal memory
-    u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
-    u8g2.setCursor(0, 15); // spalte zeile
-    u8g2.print("Glas entnehmen");
-    u8g2.setCursor(0, 30); // x y
-    u8g2.print("Mot:");
-    u8g2.setCursor(50, 30);
-    u8g2.print(stepper.currentPosition());
-    u8g2.setCursor(0, 55); // x y
-    u8g2.print("Enc:");
-    u8g2.setCursor(50, 55);
-    u8g2.print(Position);
-    u8g2.sendBuffer();
-    //delay(3000);
-    // Mein Startsensor prellt. Deshalb 500ms zwischen zwei LOWs abwarten 
-    timeIdle = millis();
+           //Displayausgabe
+           u8g2.clearBuffer();          // clear the internal memory
+           u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+           u8g2.setCursor(0, 15); // spalte zeile
+           u8g2.print("Glas entnehmen");
+           u8g2.setCursor(0, 30); // x y
+           u8g2.print("Mot:");
+           u8g2.setCursor(50, 30);
+           u8g2.print(stepper.currentPosition());
+           u8g2.setCursor(0, 55); // x y
+           u8g2.print("Enc:");
+           u8g2.setCursor(50, 55);
+           u8g2.print(Position);
+           u8g2.sendBuffer();
+           //delay(3000);
+           // Mein Startsensor prellt. Deshalb 500ms zwischen zwei LOWs abwarten
+           timeIdle = millis();
     while ( (millis() - timeIdle) < 1000) {
-    if (readStartSensor() == LOW) {
-      timeIdle = millis();
-      //Serial.println("wait..pressed");
+      if (readStartSensor() == LOW) {
+          timeIdle = millis();
+          //Serial.println("wait..pressed");
+        }
+        delay(1);
       }
-    delay(1);
-    }
 
     // Displayausgabe
     u8g2.clearBuffer();          // clear the internal memory
@@ -644,7 +793,7 @@ void loop()
     u8g2.sendBuffer();
     delay(1000);
     modus = RUHE;
-    //delay(1500);  // Zeit um Glas zu entnehmen
+            //delay(1500);  // Zeit um Glas zu entnehmen
 
   } // Etikettieren ende
 
@@ -665,7 +814,7 @@ boolean readStartSensor()
   else {
     return HIGH;
   }
-   
+
 }
 
 
@@ -697,13 +846,16 @@ void getPreferences(void) // Daten aus Eeprom lesen
 
 }
 
+int encoderSmallgetCounthalf() {
+  return encoderSmall.getCount() / 2;
+}
 
 
 void setPreferences() // Daten in Eeprom schreiben
 {
 
   long preferences_newchksum;
-  Length = Position;
+  //Length = Position;
 
   preferences_newchksum = Length;
 
