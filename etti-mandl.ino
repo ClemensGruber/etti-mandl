@@ -41,7 +41,7 @@
 */
 
 
-const char versionTag[] = "ver0.2";
+const char versionTag[] = "ver0.4-marc";
 
 
 //
@@ -53,7 +53,7 @@ const char versionTag[] = "ver0.2";
 
 // Ab hier nur verstellen wenn Du genau weisst, was Du tust!
 //
-//#define isDebug             // serielle debug-Ausgabe aktivieren.
+#define isDebug             // serielle debug-Ausgabe aktivieren.
 
 // OTA Support. Experimenteller Beta-Betrieb
 //#define useOTA
@@ -109,7 +109,9 @@ ESP32Encoder encoderSmall;
 #endif
 
 //U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
+//U8G2_SSD1306_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
+//U8G2_SH1106_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0, SCL, SDA, U8X8_PIN_NONE);
+U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 // fuer Heltec WiFi Kit 32 (ESP32 onboard OLED)
 //U8G2_SSD1306_128X64_NONAME_F_SW_I2C u8g2(U8G2_R0, /* clock=*/ 15, /* data=*/ 4, /* reset=*/ 16);
@@ -154,6 +156,10 @@ void setup()
   u8g2.clearBuffer();          // clear the internal memory
 
 
+  // Preferences aus dem EEPROM lesen
+  getPreferences(); // Eeprom auslesen
+
+
   ////////////////////////////// OTA
 
 #ifdef useOTA
@@ -161,11 +167,11 @@ void setup()
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
   while (WiFi.waitForConnectResult() != WL_CONNECTED) {
-    //Serial.println("Connection Failed! Rebooting...");
+    //Serial.println("Connection Failed! Rebooting..");
     delay(5000);
-    ESP.restart();
+    //ESP.restart();
   }
-
+  
   // Port defaults to 3232
   // ArduinoOTA.setPort(3232);
 
@@ -246,6 +252,7 @@ void setup()
   pinMode(button1, INPUT_PULLUP); // internal pullup
   pinMode(button2, INPUT_PULLUP); // internal pullup buttonsave
   pinMode(buttonsave, INPUT_PULLUP); // internal pullup
+  pinMode(rotaryButton, INPUT_PULLUP); // internal pullup
 
 
   // Rotary Encoder groß
@@ -257,9 +264,10 @@ void setup()
 
   // Rotary Encoder klein
   //----------------
-  encoderSmall.attachHalfQuad(34, 35);
+  encoderSmall.attachHalfQuad(outputA, outputB);
   //encoderSmall.attachfullQuad(34, 35);
   encoderSmall.clearCount();
+  encoderSmall.setCount(-2 * Length);
 
 
 
@@ -282,24 +290,34 @@ void setup()
 
 
 #ifdef USE_STEMPEL
+  u8g2.clearBuffer();          // clear the internal memory
+  u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+  u8g2.setCursor(0, 15); // spalte zeile
+  u8g2.print("Servo check");
+  u8g2.sendBuffer();
   servo.attach(servo_pin);
   servo.setEasingType(EASE_CUBIC_IN_OUT);
   servo.setSpeed(ServoSpeed);
-  servo.write(WinkelRuhe);
+  servo.easeTo(WinkelRuhe);
+  servo.easeTo(WinkelAktiv);
+  //servo.easeTo((int)(WinkelAktiv*0.8));
+/*
+  if (digitalRead(13) == LOW) {
+    servo.easeTo(WinkelAktiv);
+  }
+*/  
+  servo.easeTo(WinkelRuhe);  
+ 
 #endif
 
 
-
-
-  // Preferences aus dem EEPROM lesen
-  getPreferences(); // Eeprom auslesen
 
 
   // Displayausgabe
   u8g2.clearBuffer();          // clear the internal memory
   u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
 
-  u8g2.setCursor(0, 15); // spalte zeile
+  u8g2.setCursor(6, 40); // spalte zeile
   u8g2.print("Glas einlegen");
 
   u8g2.sendBuffer();
@@ -398,23 +416,116 @@ void loop()
 
 
   // ------ RotarySmall Testing ----------------------------------------------------
-  if (digitalRead(13) == LOW && (modus == RUHE || modus == BOOT)) {
-    u8g2.clearBuffer();          // clear the internal memory
+ 
+  if (digitalRead(rotaryButton) == LOW && (modus == RUHE || modus == BOOT)) {
+    timePressed = millis();
+    while ( (digitalRead(rotaryButton) == LOW) && ( ( millis() - timePressed ) < 1000))
+      {}
+    if ( (millis() - timePressed) >999 ) {
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_courB14_tf);
+        u8g2.setCursor(20, 40);
+        u8g2.print("New Date");
+        u8g2.sendBuffer();
+        servo.easeTo(WinkelAktiv/2);
+        delay(2000);
+        modus = NEWDATE;
+        
+    }
+    else {
     u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
-
-    u8g2.setCursor(0, 15); // x y
-    u8g2.print("RotS:");
-    u8g2.setCursor(60, 15);
+    u8g2.clearBuffer();
+    u8g2.setFont(u8g2_font_courB14_tf);
+    u8g2.setCursor(10, 40); // x y
+    u8g2.print("Länge:");
+    u8g2.setCursor(80, 40);
     u8g2.print(((int)encoderSmallgetCounthalf()));
-    /*
-        u8g2.setCursor(0, 30); // x y
-        u8g2.print("Step:");
-        u8g2.setCursor(50, 30);
-        u8g2.print(stepper.currentPosition());
-    */
+    
+    //    u8g2.setCursor(0, 30); // x y
+    //    u8g2.print("Step:");
+    //    u8g2.setCursor(50, 30);
+    //    u8g2.print(stepper.currentPosition());
+    
     u8g2.sendBuffer();
-
+    delay(300);
+    
+    modus = CONFIG;
+    encoderSmall.setCount(-2 * Length);
+    LengthOld = Length;
+    }    
   }
+
+  //----------------------------- New Date ---------------------------------------------
+    if (modus == NEWDATE) { 
+       if (digitalRead(rotaryButton) == LOW) {
+          timePressed = millis();
+          while ( (digitalRead(rotaryButton) == LOW) && ( ( millis() - timePressed ) < 1000))
+            {}
+          if ( (millis() - timePressed) >999 ) {
+            u8g2.clearBuffer();
+            u8g2.setFont(u8g2_font_courB14_tf);
+            u8g2.setCursor(20, 40);
+            u8g2.print("fertig");
+            u8g2.sendBuffer();
+            servo.easeTo(WinkelRuhe);
+            delay(2000);
+            modus = RUHE;
+            u8g2.sendBuffer();
+      delay(1000);
+      u8g2.clearBuffer();   
+      u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+      u8g2.setCursor(6, 40); // spalte zeile
+      u8g2.print("Glas einlegen");
+      u8g2.sendBuffer();
+      modus = RUHE;
+      delay(300);
+          }
+       else {
+        servo.easeTo(WinkelRuhe);
+                    servo.easeTo(WinkelAktiv);
+            servo.easeTo(WinkelAktiv/2);
+    
+    
+    }
+       }
+    }
+
+
+  //----------------------------- Config -----------------------------------------------
+   if (modus == CONFIG) { 
+    if (LengthOld != (int)encoderSmallgetCounthalf()) {
+      u8g2.setFont(u8g2_font_courB14_tf);
+      u8g2.setCursor(10, 40); // x y
+      u8g2.print("Länge:");
+      u8g2.setCursor(80, 40);
+      u8g2.print(((int)encoderSmallgetCounthalf()));
+      u8g2.sendBuffer();
+      LengthOld = (int)encoderSmallgetCounthalf();
+    }
+    else if (digitalRead(rotaryButton) == LOW) {
+      u8g2.clearBuffer();          // clear the internal memory
+      u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+      u8g2.setCursor(10, 40); // spalte zeile
+      if (LengthOld != Length) {
+        Length = LengthOld;
+        u8g2.print("gespeichert");
+        setPreferences();
+      }
+      else {
+        u8g2.print("abgebrochen");
+      }
+      u8g2.sendBuffer();
+      delay(1000);
+      u8g2.clearBuffer();   
+      u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+      u8g2.setCursor(6, 40); // spalte zeile
+      u8g2.print("Glas einlegen");
+      u8g2.sendBuffer();
+      modus = RUHE;
+      delay(300);
+    }
+   }
+  
 
 
 
@@ -558,7 +669,7 @@ void loop()
     modus = RUHE;
     u8g2.clearBuffer();          // clear the internal memory
     u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
-    u8g2.setCursor(0, 15); // spalte zeile
+    u8g2.setCursor(6, 40); // spalte zeile
     u8g2.print("Glas einlegen");
     u8g2.sendBuffer();
   }
@@ -569,11 +680,13 @@ void loop()
 
   if (readStartSensor() == LOW && (modus == RUHE || modus == BOOT))  //Sensor erkannt -> Start
   {
-
+    
     Position = 0; // Position des Rotary Encoders auf 0 setzen
     encoder.clearCount();
 #ifdef isDebug
-    Serial.println("Startsensor erkannt");
+    Serial.println("Startsensor erkannt. Wert:");
+    Serial.println(analogRead(start_pin));
+    //delay(3000);
     Serial.print("Length: ");
     Serial.println(Length);
     Serial.print("LastSteps: ");
@@ -604,7 +717,7 @@ void loop()
 
       modus = START;
 
-      for (int i = 2; i > 0; i--) {
+      for (int i = StartLatenz; i > 0; i--) {
         u8g2.clearBuffer();          // clear the internal memory
         u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
         u8g2.setCursor(0, 15); // spalte zeile
@@ -656,7 +769,7 @@ void loop()
   {
     modus = SCHLEICHEN;
 #ifdef isDebug
-    Serial.println("LastSteps=0, daher Schleichfahrt");
+    //Serial.println("LastSteps=0, daher Schleichfahrt");
 #endif
   }
 
@@ -666,12 +779,13 @@ void loop()
   {
     stepper.run();
 #ifdef isDebug
-    Serial.print("NemaPosition: ");
+    /*Serial.print("NemaPosition: ");
     Serial.println(stepper.currentPosition());
     Serial.print("NemaSpeed: ");
     Serial.println(stepper.speed());
     Serial.print("Rotary: ");
     Serial.println(Position);
+    */
 #endif
 
     if (Position >= Length)  // Stoppe, wenn Rotary Encoder Ziellänge erreicht. Sollte eigentlich nicht vorkommen,
@@ -697,11 +811,12 @@ void loop()
     stepper.setSpeed(CreepSpeed);
     stepper.runSpeed(); // Schleichfahrt mit fester Geschwindigkeit
 #ifdef isDebug
-    Serial.println("SCHLEICHEN");
+    /*Serial.println("SCHLEICHEN");
     Serial.print("Position: ");
     Serial.println(Position);
     Serial.print("Length: ");
     Serial.println(Length);
+    */
 #endif
 
 
@@ -742,13 +857,13 @@ void loop()
     u8g2.sendBuffer();
 
     servo.easeTo(WinkelAktiv);
-    delay(StempelPause);
-
-    for (int i = 0; i <= StempelTrockenTupfen; i++) {
+    //delay(StempelPause);^
+    for (int i = 0; i < StempelTrockenTupfen; i++) {
+      delay(StempelPause);
       servo.easeTo(WinkelAktiv - 10);
       delay(StempelPause);
       servo.easeTo(WinkelAktiv);
-      delay(StempelPause);
+      
     }
     
     servo.easeTo(WinkelRuhe);
@@ -788,7 +903,7 @@ void loop()
     // Displayausgabe
     u8g2.clearBuffer();          // clear the internal memory
     u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
-    u8g2.setCursor(0, 15); // spalte zeile
+    u8g2.setCursor(6, 40); // spalte zeile
     u8g2.print("Glas einlegen");
     u8g2.sendBuffer();
     delay(1000);
@@ -809,7 +924,7 @@ void loop()
 boolean readStartSensor()
 {
   if (analogRead(start_pin) < highLowSchwelle) {
-    return LOW;
+    return LOW;    
   }
   else {
     return HIGH;
@@ -824,6 +939,7 @@ void getPreferences(void) // Daten aus Eeprom lesen
   preferences.begin("EEPROM", false);       //Parameter aus eeprom lesen
   Length = preferences.getUInt("Length", 0);
   preferences_chksum = Length;
+  LengthOld = Length;
 
   preferences.end();
 
@@ -847,7 +963,7 @@ void getPreferences(void) // Daten aus Eeprom lesen
 }
 
 int encoderSmallgetCounthalf() {
-  return encoderSmall.getCount() / 2;
+  return encoderSmall.getCount() / -2;
 }
 
 
@@ -945,7 +1061,7 @@ void print_logo() {
   u8g2.setCursor(85, 27);    u8g2.print("ETTI");
   u8g2.setCursor(75, 43);    u8g2.print("MANDL");
   u8g2.setFont(u8g2_font_courB08_tf);
-  u8g2.setCursor(85, 64);    u8g2.print(versionTag);
+  u8g2.setCursor(45, 64);    u8g2.print(versionTag);
   u8g2.sendBuffer();
   delay(2000);
   u8g2.clearBuffer();
