@@ -45,7 +45,7 @@ int Length;                                // Etikettenlänge in Schritten (Rota
 int LengthOld;                             // alter Längenwert, um Rotary-Änderungen festestellen  zu können
 int LastSteps;                             // Benötigte Schritte des Schrittmotors für das letzte Etikett
 int manualStep = 50;                       // Anzahl Schritte je manuellem spulen 
-int MaxSpeed = 5000;                        // Schrittmotor Maximalgeschwindigkeit
+int MaxSpeed = 12000;                        // Schrittmotor Maximalgeschwindigkeit (bis jetzt immer 5000, // 70000, 9000 auch ok)
 int Acceleration = 3000;                    // Schrittmotor Beschleunigung (höher = schneller)
 //int MaxSpeed = 9000;                        // Schrittmotor Maximalgeschwindigkeit
 //int Acceleration = 7000;                    // Schrittmotor Beschleunigung (höher = schneller)
@@ -62,7 +62,7 @@ enum MODUS {RUHE, START, SCHLEICHEN, ENDE, BOOT, CONFIG, NEWDATE };
 byte modus = BOOT;
 unsigned long timeIdle;
 unsigned long timePressed; 
-
+boolean glasEntfernt;
 
 //const int highLowSchwelle = 1200;           // Grenze des StartSensors zwischen HIGH / LOW 
 const int highLowSchwelle = 100;           // Grenze des StartSensors zwischen HIGH / LOW 

@@ -11,7 +11,7 @@
                             Auslagerung der Konfiguration in etti-mandl.h
 
 
-
+  2022-11-16 Marc Junker    Länge von Rotary Tics auf mm umgestellt
 */
 
 
@@ -41,7 +41,7 @@
 */
 
 
-const char versionTag[] = "ver0.4-marc";
+const char versionTag[] = "ver0.5-marc";
 
 
 //
@@ -436,11 +436,13 @@ void loop()
     u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
     u8g2.clearBuffer();
     u8g2.setFont(u8g2_font_courB14_tf);
-    u8g2.setCursor(10, 40); // x y
+    u8g2.setCursor(10, 30); // x y
     u8g2.print("Länge:");
-    u8g2.setCursor(80, 40);
-    u8g2.print(((int)encoderSmallgetCounthalf()));
-    
+    u8g2.setCursor(10, 50);
+    //u8g2.print(((int)encoderSmallgetCounthalf()));
+    //u8g2.print( ( round ( (int)encoderSmallgetCounthalf() / 0.55 ) ) / 10 );
+    u8g2.print(tics_as_mm((int)encoderSmallgetCounthalf()) ,1);
+    u8g2.print(" mm");
     //    u8g2.setCursor(0, 30); // x y
     //    u8g2.print("Step:");
     //    u8g2.setCursor(50, 30);
@@ -495,24 +497,40 @@ void loop()
    if (modus == CONFIG) { 
     if (LengthOld != (int)encoderSmallgetCounthalf()) {
       u8g2.setFont(u8g2_font_courB14_tf);
-      u8g2.setCursor(10, 40); // x y
+    /*  u8g2.setCursor(10, 40); // x y
       u8g2.print("Länge:");
       u8g2.setCursor(80, 40);
       u8g2.print(((int)encoderSmallgetCounthalf()));
-      u8g2.sendBuffer();
+    */
+    u8g2.setCursor(10, 30); // x y
+    u8g2.print("Länge:");
+    u8g2.setCursor(10, 50);
+    //u8g2.print(((int)encoderSmallgetCounthalf()));
+    //u8g2.print( ( round ( (int)encoderSmallgetCounthalf() / 0.55 ) ) / 10 );
+    u8g2.print(tics_as_mm((int)encoderSmallgetCounthalf()) ,1);
+    u8g2.print(" mm");
+    u8g2.sendBuffer();
       LengthOld = (int)encoderSmallgetCounthalf();
     }
     else if (digitalRead(rotaryButton) == LOW) {
-      u8g2.clearBuffer();          // clear the internal memory
-      u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
-      u8g2.setCursor(10, 40); // spalte zeile
       if (LengthOld != Length) {
         Length = LengthOld;
-        u8g2.print("gespeichert");
+        //u8g2.print("gespeichert");
         setPreferences();
+  u8g2.setFont(u8g2_font_unifont_t_symbols);
+  u8g2.drawUTF8(80, 30, "☑");
+  u8g2.sendBuffer();
+  delay(1000);
+
+
+        
       }
       else {
-        u8g2.print("abgebrochen");
+        //u8g2.print("abgebrochen");
+         u8g2.setFont(u8g2_font_unifont_t_symbols);
+         u8g2.drawUTF8(80, 30, "☒");
+         u8g2.sendBuffer();
+         delay(1000);
       }
       u8g2.sendBuffer();
       delay(1000);
@@ -726,7 +744,7 @@ void loop()
         u8g2.sendBuffer();
         delay(1000);
       }
-
+       glasEntfernt = false;
       //delay(1500);
 
 
@@ -853,10 +871,22 @@ void loop()
     u8g2.clearBuffer();          // clear the internal memory
     u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
     u8g2.setCursor(0, 15); // x y
-    u8g2.print("Stempeln");
+    //u8g2.print("Stempeln");
+    u8g2.print("Glas entnehmen");
     u8g2.sendBuffer();
 
     servo.easeTo(WinkelAktiv);
+    if (readStartSensor() == HIGH) {
+        u8g2.clearBuffer();          // clear the internal memory
+        u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+        u8g2.setCursor(0, 15); // x y
+        //u8g2.print("Stempeln");
+        u8g2.print("entnommen");
+        u8g2.sendBuffer();    
+        glasEntfernt = true;
+      }
+
+    
     //delay(StempelPause);^
     for (int i = 0; i < StempelTrockenTupfen; i++) {
       delay(StempelPause);
@@ -867,7 +897,15 @@ void loop()
     }
     
     servo.easeTo(WinkelRuhe);
-           
+        if (readStartSensor() == HIGH) {
+        u8g2.clearBuffer();          // clear the internal memory
+        u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
+        u8g2.setCursor(0, 15); // x y
+        //u8g2.print("Stempeln");
+        u8g2.print("entnommen");
+        u8g2.sendBuffer();    
+        glasEntfernt = true;
+      }       
 #endif
 
 
@@ -876,10 +914,11 @@ void loop()
            //--------------
 
            //Displayausgabe
+           /*
            u8g2.clearBuffer();          // clear the internal memory
            u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
            u8g2.setCursor(0, 15); // spalte zeile
-           u8g2.print("Glas entnehmen");
+           //u8g2.print("Glas entnehmen");
            u8g2.setCursor(0, 30); // x y
            u8g2.print("Mot:");
            u8g2.setCursor(50, 30);
@@ -890,16 +929,17 @@ void loop()
            u8g2.print(Position);
            u8g2.sendBuffer();
            //delay(3000);
+           */
            // Mein Startsensor prellt. Deshalb 500ms zwischen zwei LOWs abwarten
            timeIdle = millis();
-    while ( (millis() - timeIdle) < 1000) {
+    while ( !glasEntfernt && (millis() - timeIdle) < 1000) {
       if (readStartSensor() == LOW) {
           timeIdle = millis();
           //Serial.println("wait..pressed");
         }
         delay(1);
       }
-
+    glasEntfernt = true;
     // Displayausgabe
     u8g2.clearBuffer();          // clear the internal memory
     u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
@@ -956,7 +996,9 @@ void getPreferences(void) // Daten aus Eeprom lesen
   u8g2.setCursor(0, 30); // x y
   u8g2.print("Etikettenlänge:");
   u8g2.setCursor(0, 50);
-  u8g2.print(Length);
+  //u8g2.print(Length);
+  u8g2.print(tics_as_mm(Length),1);
+  u8g2.print(" mm");
   u8g2.sendBuffer();
   delay(3000);
 
@@ -994,21 +1036,6 @@ void setPreferences() // Daten in Eeprom schreiben
 
   */
 
-
-  //Displayausgabe
-  u8g2.clearBuffer();          // clear the internal memory
-  u8g2.setFont(u8g2_font_courB10_tf); // choose a suitable font
-  u8g2.setCursor(0, 15); // spalte zeile
-  u8g2.print("speichere:");
-  u8g2.setCursor(0, 30); // x y
-  u8g2.print("Länge:");
-  u8g2.setCursor(50, 30);
-  u8g2.print(Length);
-
-  u8g2.sendBuffer();
-  delay(3000);
-
-
   preferences_chksum = preferences_newchksum;
 
   preferences.begin("EEPROM", false);
@@ -1021,6 +1048,10 @@ void setPreferences() // Daten in Eeprom schreiben
 #endif
 
 
+}
+
+float tics_as_mm(int tmptics) {
+  return ( ( round ( (tmptics  / 0.55 ) ) ) / 10 );
 }
 
 
