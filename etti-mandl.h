@@ -2,8 +2,8 @@
 
 
 
-const char* ssid = "Netzwerk99";
-const char* password = "Werner222w";
+const char* ssid = "";
+const char* password = "";
 
 // ** Definition der pins
 // ----------------------
